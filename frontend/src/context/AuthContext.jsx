@@ -1,67 +1,65 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import api from '../api/axios';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import api from "@/api/client";
 
 const AuthContext = createContext(null);
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+const TOKEN_KEY = "nexuslinks_token";
+const USER_KEY = "nexuslinks_user";
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    const storedUser = localStorage.getItem('user');
-    if (token && storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-      }
+export function AuthProvider({ children }) {
+  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
+  const [user, setUser] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(USER_KEY) || "null");
+    } catch {
+      return null;
     }
-    setLoading(false);
+  });
+
+  const login = useCallback((newToken, newUser) => {
+    localStorage.setItem(TOKEN_KEY, newToken);
+    if (newUser) localStorage.setItem(USER_KEY, JSON.stringify(newUser));
+    else localStorage.removeItem(USER_KEY);
+    setToken(newToken);
+    setUser(newUser ?? null);
   }, []);
 
-  const login = async (email, password) => {
-    const response = await api.post('/auth/login', { email, password });
-    const { access_token } = response.data;
-    localStorage.setItem('token', access_token);
-
-    // Fetch user details
-    const userResponse = await api.get('/auth/users/me');
-    setUser(userResponse.data);
-    localStorage.setItem('user', JSON.stringify(userResponse.data));
-    return userResponse.data;
-  };
-
-  const register = async (username, email, password) => {
-    const response = await api.post('/auth/register', { username, email, password });
-    const { access_token } = response.data;
-    localStorage.setItem('token', access_token);
-
-    // Fetch user details
-    const userResponse = await api.get('/auth/users/me');
-    setUser(userResponse.data);
-    localStorage.setItem('user', JSON.stringify(userResponse.data));
-    return userResponse.data;
-  };
-
-  const logout = () => {
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    setToken(null);
     setUser(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-  };
+  }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
-      {children}
-    </AuthContext.Provider>
+  // Fetch the profile when we hold a token but no cached user
+  useEffect(() => {
+    let cancelled = false;
+    if (token && !user) {
+      api
+        .get("/auth/users/me")
+        .then((res) => {
+          if (!cancelled) login(token, res.data);
+        })
+        .catch(() => {
+          if (!cancelled) logout();
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [token, user, login, logout]);
+
+  const value = useMemo(
+    () => ({ token, user, isAuthenticated: Boolean(token), login, logout }),
+    [token, user, login, logout]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
+  return ctx;
 }

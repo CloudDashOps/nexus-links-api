@@ -1,0 +1,45 @@
+# Render Blueprint — deploys the API, its Postgres database and the frontend.
+# Docs: https://render.com/docs/blueprint-spec
+databases:
+  - name: nexuslinks-db
+    databaseName: nexuslinks
+    user: nexuslinks
+    plan: free
+
+services:
+  # ------------------------- FastAPI backend -------------------------
+  - type: web
+    name: nexuslinks-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true          # long random secret, managed by Render
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nexuslinks-db
+          property: connectionString
+      - key: CORS_ORIGINS
+        sync: false                  # set to your frontend URL after first deploy
+
+  # -------------------- React + Vite static site --------------------
+  - type: web
+    name: nexuslinks-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      # SPA fallback: serve index.html for client-side routes
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        sync: false                  # set to your API URL (e.g. https://nexuslinks-api.onrender.com)

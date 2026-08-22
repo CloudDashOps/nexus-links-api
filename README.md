@@ -1,248 +1,161 @@
-# NexusLinks API
+<div align="center">
 
-A full-stack URL shortening and link management application with click analytics, QR code generation, and JWT-based authentication. Built with a **FastAPI** backend and a **React** frontend.
+# 🔗 NexusLinks
 
----
+**A high-performance URL shortener with built-in Link Intelligence.**
 
-## Features
+Short links are just the beginning — every link gets a live analytics dashboard: click trends, device & browser breakdowns, traffic sources, a weekday×hour engagement heatmap, UTM campaign tagging, and CSV export.
 
-- **User Authentication** — Register and login with email/password; JWT bearer tokens for secure API access.
-- **Link Management** — Create, read, update, and delete shortened links.
-- **Custom Slugs** — Optionally assign a custom short code instead of a randomly generated one.
-- **Link Expiration** — Set an expiry date for time-limited links.
-- **Click Tracking** — Every redirect increments a click counter and records referrer + user-agent.
-- **Analytics** — Retrieve per-link analytics including total clicks and referrer breakdown.
-- **QR Code Generation** — Generate a QR code image for any shortened link.
-- **Protected Dashboard** — Authenticated users access a responsive dashboard to manage links.
-- **Responsive UI** — Tailwind CSS 4 with a clean, modern design.
+`FastAPI` · `React 19` · `Tailwind CSS v4` · `shadcn/ui` · `PostgreSQL` · `Render`
+
+</div>
 
 ---
 
-## Tech Stack
+## ✨ Features
 
-### Frontend
+| Area | Capabilities |
+|---|---|
+| **Link management** | Auto-generated slugs (crypto-random), custom vanity slugs, titles, expiry dates, one-click copy |
+| **📊 Link Intelligence** | Daily click time-series, referrer breakdown, device & browser detection, weekday×hour heatmap, CSV export, 15s live auto-refresh |
+| **UTM builder** | Tag `utm_source` / `utm_medium` / `utm_campaign` directly in the create-link dialog |
+| **Auth** | JWT bearer tokens (bcrypt hashing), password strength policy, login rate limiting |
+| **Security** | Per-user ownership scoping, open-redirect protection, strict CORS, production config validation at boot |
+| **UX** | Dark/light theme, skeleton loaders, toast feedback, responsive layout |
 
-| Technology       | Purpose                        |
-|------------------|--------------------------------|
-| React 19         | UI library                     |
-| Vite 8           | Build tool and dev server      |
-| Tailwind CSS 4   | Utility-first styling          |
-| React Router 7   | Client-side routing            |
-| Axios            | HTTP client with interceptors  |
-| Lucide React     | Icon library                   |
-| React Hot Toast  | Toast notifications            |
-| clsx / tailwind-merge | Conditional class merging |
+## 🗺 Architecture
+
+```mermaid
+flowchart LR
+    subgraph Client["Browser"]
+        UI["React SPA<br/>Tailwind v4 + shadcn/ui<br/>Recharts dashboards"]
+    end
+
+    subgraph RS["Render Platform"]
+        subgraph API["FastAPI Service"]
+            AUTH["auth router<br/>JWT + rate limit"]
+            LINKS["links router<br/>CRUD + QR + analytics + CSV"]
+            REDIR["redirect router"]
+        end
+        DB[("PostgreSQL")]
+    end
+
+    Public["Public visitors"] -->|"GET /code"| REDIR
+    REDIR -->|"307 redirect"| Target["Destination site"]
+    REDIR -->|"record click"| DB
+
+    UI -->|"REST + JWT"| API
+    AUTH --> DB
+    LINKS --> DB
+```
+
+### Request lifecycle
+
+1. **Create** — the SPA posts to `/links/`; the backend validates the URL scheme (http/s only), checks slug collisions, and stores the link scoped to the owner's user id.
+2. **Share** — the short link points at the API origin. Anyone hitting `/{short_code}` is transparently redirected (`307`) while the click counter increments and an analytics row is written (referrer + user-agent).
+3. **Analyze** — the dashboard polls `/links/{id}/analytics`, which aggregates raw clicks into daily series, referrer/device/browser counts and a weekday×hour heatmap. Raw data exports as CSV.
+
+### Project structure
+
+```
+├── backend/
+│   ├── app/
+│   │   ├── main.py          # FastAPI app, CORS, routers
+│   │   ├── config.py        # Env-driven settings + prod validation
+│   │   ├── database.py      # SQLAlchemy engine/session (SQLite | Postgres)
+│   │   ├── models.py        # User, LinkModel, ClickAnalytics
+│   │   ├── schemas.py       # Pydantic validation (password policy, slug rules)
+│   │   ├── security.py      # JWT + bcrypt
+│   │   ├── url_safety.py    # Open-redirect guard
+│   │   ├── ratelimit.py     # Sliding-window rate limiter
+│   │   └── user_agents.py   # Device/browser classification
+│   ├── tests/               # pytest suite
+│   └── requirements.txt
+├── frontend/
+│   └── src/
+│       ├── api/             # Axios client + interceptors
+│       ├── components/
+│       │   ├── ui/          # shadcn/ui primitives
+│       │   ├── layout/      # Navbar, ProtectedRoute
+│       │   └── dashboard/   # Charts, heatmap, table, dialogs
+│       ├── context/         # AuthContext
+│       ├── lib/             # cn(), formatting helpers
+│       └── pages/           # Landing, Login, Register, Dashboard, LinkDetail
+└── render.yaml              # One-click Render blueprint
+```
+
+## 🚀 Getting started
+
+**Prerequisites:** Python 3.11+, Node 20+
 
 ### Backend
 
-| Technology       | Purpose                        |
-|------------------|--------------------------------|
-| Python 3.10+     | Runtime                        |
-| FastAPI          | Web framework                  |
-| SQLAlchemy 2.0   | ORM                            |
-| SQLite           | Database                       |
-| Pydantic v2      | Data validation & serialization|
-| python-jose      | JWT encoding/decoding          |
-| passlib (bcrypt) | Password hashing               |
-| python-dotenv    | Environment variable loading   |
-| qrcode (Pillow)  | QR code image generation       |
-| uvicorn          | ASGI server                    |
-
----
-
-## Backend Architecture
-
-```
-backend/
-├── app/
-│   ├── __init__.py
-│   ├── main.py          # FastAPI app, CORS, router registration
-│   ├── database.py      # SQLAlchemy engine, session, Base
-│   ├── models.py        # ORM models: User, LinkModel, ClickAnalytics
-│   ├── schemas.py       # Pydantic request/response schemas
-│   ├── security.py      # Password hashing, JWT creation/verification, auth dependency
-│   └── routers/
-│       ├── auth.py      # /auth/register, /auth/login, /auth/users/me
-│       ├── links.py     # CRUD for links, QR code, analytics
-│       └── redirect.py  # /{short_code} redirect with click tracking
-├── requirements.txt
-└── .env
-```
-
-### Database Models
-
-- **User** — `id`, `username`, `email` (unique), `hashed_password`, `created_at`
-- **LinkModel** — `id`, `target_url`, `short_code` (unique, indexed), `custom_slug` (unique, nullable), `title`, `clicks`, `expires_at`, `created_at`
-- **ClickAnalytics** — `id`, `link_id` (FK → links), `timestamp`, `referrer`, `user_agent`
-
-### Authentication Flow
-
-1. User registers or logs in via `/auth/register` or `/auth/login`.
-2. Server returns a JWT access token (30-minute expiry, HS256).
-3. Client stores the token in `localStorage` and sends it as `Authorization: Bearer <token>`.
-4. Protected endpoints use the `get_current_user` dependency to validate the token and fetch the user.
-
----
-
-## Frontend Overview
-
-```
-frontend/
-├── src/
-│   ├── api/
-│   │   └── axios.js          # Axios instance with auth interceptor
-│   ├── components/
-│   │   ├── common/
-│   │   │   └── StatCard.jsx  # Reusable stat display card
-│   │   ├── layout/
-│   │   │   └── Navbar.jsx    # Top navigation bar
-│   │   └── links/
-│   │       ├── CreateLinkModal.jsx  # Modal form for creating links
-│   │       └── LinkTable.jsx        # Table listing all links
-│   ├── context/
-│   │   └── AuthContext.jsx   # Auth state, login/register/logout
-│   ├── pages/
-│   │   ├── Auth/
-│   │   │   ├── Login.jsx     # Login page
-│   │   │   └── Register.jsx  # Register page
-│   │   └── Dashboard.jsx     # Protected dashboard
-│   ├── App.jsx               # Root component with routing
-│   ├── main.jsx              # Entry point
-│   └── index.css             # Tailwind CSS imports
-├── index.html
-├── package.json
-└── vite.config.js
-```
-
-### Frontend Routes
-
-| Path         | Component  | Access     |
-|--------------|------------|------------|
-| `/login`     | Login      | Public     |
-| `/register`  | Register   | Public     |
-| `/dashboard` | Dashboard  | Protected  |
-| `/`          | —          | Redirects to `/dashboard` |
-
----
-
-## Installation
-
-### Prerequisites
-
-- **Node.js** 18+
-- **Python** 3.10+
-- **pip** (Python package manager)
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/CloudDashOps/nexus-links-api.git
-cd nexus-links-api
-```
-
-### 2. Backend setup
-
 ```bash
 cd backend
+python -m venv .venv && .venv\Scripts\activate   # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
+copy .env.example .env                            # then set SECRET_KEY
+
+uvicorn app.main:app --reload                     # http://localhost:8000
 ```
 
-Create a `.env` file in the `backend/` directory:
+SQLite is used by default; set `DATABASE_URL` to a Postgres connection string for production.
 
-```env
-SECRET_KEY=your-secure-random-secret-key
-DATABASE_URL=sqlite:///./nexuslinks.db
-```
-
-Start the backend server:
-
-```bash
-uvicorn app.main:app --reload
-```
-
-The API will be available at `http://127.0.0.1:8000`.
-
-### 3. Frontend setup
+### Frontend
 
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev                                       # http://localhost:5173
 ```
 
-The frontend will be available at `http://localhost:5173`.
+Set `VITE_API_URL=https://your-api.onrender.com` in `frontend/.env` when pointing at a remote API.
 
----
+### Tests
 
-## Environment Variables
+```bash
+cd backend && python -m pytest tests -q           # backend suite
+cd frontend && npm test                           # frontend suite
+```
 
-| Variable       | Description                          | Default                        |
-|----------------|--------------------------------------|--------------------------------|
-| `SECRET_KEY`   | Secret key for JWT token signing     | `change-this-to-a-long-random-secret-key` |
-| `DATABASE_URL` | SQLAlchemy database connection URL   | `sqlite:///./nexuslinks.db`    |
+## 📡 API reference
 
-> **Note:** Change the `SECRET_KEY` to a strong, random value in production. Never commit secrets to version control.
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/auth/register` | — | Create account → JWT |
+| `POST` | `/auth/login` | — | Obtain JWT |
+| `GET` | `/auth/users/me` | ✅ | Current user profile |
+| `POST` | `/links/` | ✅ | Create link (custom slug, expiry) |
+| `GET` | `/links/` | ✅ | List *your* links |
+| `GET` | `/links/{id}` | ✅ | Link detail |
+| `PUT` | `/links/{id}` | ✅ | Update link |
+| `DELETE` | `/links/{id}` | ✅ | Delete link + its clicks |
+| `GET` | `/links/{id}/qr` | ✅ | PNG QR code |
+| `GET` | `/links/{id}/analytics?days=30` | ✅ | Full intelligence report |
+| `GET` | `/links/{id}/export` | ✅ | Click stream as CSV |
+| `GET` | `/{short_code}` | — | Public redirect + click tracking |
+| `GET` | `/health` | — | Liveness probe |
 
----
+Interactive docs: `/docs` (Swagger UI) on the API origin.
 
-## API Overview
+## ☁️ Deploying to Render
 
-Base URL: `http://127.0.0.1:8000`
+1. Push this repo to GitHub.
+2. In Render: **New → Blueprint** and select the repo — `render.yaml` provisions the API, a free PostgreSQL instance and the static frontend.
+3. Fill the two prompts:
+   - `CORS_ORIGINS` → your frontend URL (e.g. `https://nexuslinks-web.onrender.com`)
+   - `VITE_API_URL` → your API URL (e.g. `https://nexuslinks-api.onrender.com`)
 
-### Health
+The API ships with `/health` for Render health checks and refuses insecure production configs (default secrets, wildcard CORS) at boot.
 
-| Method | Endpoint | Description          |
-|--------|----------|----------------------|
-| GET    | `/`      | API health check     |
+## 🔒 Security notes
 
-### Authentication
-
-| Method | Endpoint          | Description          | Auth Required |
-|--------|-------------------|----------------------|---------------|
-| POST   | `/auth/register`  | Register a new user  | No            |
-| POST   | `/auth/login`     | Login and get token  | No            |
-| GET    | `/auth/users/me`  | Get current user     | Yes           |
-
-### Links
-
-| Method | Endpoint             | Description              | Auth Required |
-|--------|----------------------|--------------------------|---------------|
-| POST   | `/links/`            | Create a shortened link  | Yes           |
-| GET    | `/links/`            | List all links           | Yes           |
-| GET    | `/links/{id}`        | Get a single link        | Yes           |
-| PUT    | `/links/{id}`        | Update a link            | Yes           |
-| DELETE | `/links/{id}`        | Delete a link            | Yes           |
-| GET    | `/links/{id}/qr`     | Get QR code image (PNG)  | Yes           |
-| GET    | `/links/{id}/analytics` | Get click analytics   | Yes           |
-
-### Redirect
-
-| Method | Endpoint          | Description                              |
-|--------|-------------------|------------------------------------------|
-| GET    | `/{short_code}`   | Redirect to the target URL (public)      |
-
----
-
-## Screenshots
-
-> Screenshots will be added here in a future update.
-
----
-
-## Future Improvements
-
-- Pagination for link listing
-- User-specific link ownership (currently all links are visible to all authenticated users)
-- Link search and filtering
-- Rate limiting on redirect and API endpoints
-- Email verification for new accounts
-- Password reset flow
-- Dark mode toggle
-- Docker Compose setup for one-command deployment
-- PostgreSQL support as an alternative to SQLite
-
----
+- Secrets come from environment variables only; production boots fail fast on defaults.
+- All link endpoints enforce per-user ownership; foreign IDs return identical 404s (no existence leaks).
+- Redirect targets must be absolute `http(s)` URLs — scheme injection vectors are rejected at creation *and* at redirect time (defence in depth).
+- Login/register share one error message (no user enumeration) and are IP rate-limited (10 per 5 min).
+- Passwords: bcrypt + minimum entropy policy (8+ chars, letters & numbers).
 
 ## License
 
-This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
+MIT © NexusLinks contributors

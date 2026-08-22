@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
-from app.database import get_db
+
 from app import models
+from app.database import get_db
+from app.url_safety import is_safe_redirect_target
 
 router = APIRouter(tags=["Routing"])
 
@@ -15,7 +18,11 @@ def redirect_to_target(short_code: str, request: Request, db: Session = Depends(
     if not link:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Short link not found")
 
-    # Check expiration only if expires_at is set — use timezone-aware UTC comparison
+    # Never redirect to non-http(s) targets (blocks javascript:/data: injection)
+    if not is_safe_redirect_target(link.target_url):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Link target is not a safe URL")
+
+    # Check expiration using timezone-aware UTC comparison
     if link.expires_at is not None:
         expires_at = link.expires_at
         if expires_at.tzinfo is None:
@@ -32,9 +39,9 @@ def redirect_to_target(short_code: str, request: Request, db: Session = Depends(
     click = models.ClickAnalytics(
         link_id=link.id,
         referrer=referrer,
-        user_agent=user_agent
+        user_agent=user_agent,
     )
     db.add(click)
     db.commit()
 
-    return RedirectResponse(url=link.target_url)
+    return RedirectResponse(url=link.target_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
