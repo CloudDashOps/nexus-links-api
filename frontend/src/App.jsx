@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "@/context/AuthContext";
+import ErrorBoundary from "@/components/layout/ErrorBoundary";
 import ProtectedRoute from "@/components/layout/ProtectedRoute";
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
@@ -11,8 +12,9 @@ import NotFound from "@/pages/NotFound";
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
@@ -43,6 +45,7 @@ export default function App() {
           duration: 5000,
         }}
       />
-    </BrowserRouter>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }

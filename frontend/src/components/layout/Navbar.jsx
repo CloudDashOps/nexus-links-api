@@ -18,7 +18,10 @@ function getInitialTheme() {
     const stored = localStorage.getItem("nexuslinks_theme");
     if (stored) return stored;
   } catch {}
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  const prefersDark =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches;
+  return prefersDark ? "dark" : "light";
 }
 
 export default function Navbar({ onCreate }) {

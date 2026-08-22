@@ -17,7 +17,8 @@ export default function Dashboard() {
   const loadLinks = useCallback(async () => {
     try {
       const res = await api.get("/links/");
-      setLinks(res.data);
+      // Never let a malformed response poison state — links must be an array
+      setLinks(Array.isArray(res.data) ? res.data.filter((l) => l && typeof l === "object") : []);
     } catch (err) {
       toast.error(getErrorMessage(err, "Could not load your links"));
     } finally {
@@ -41,7 +42,12 @@ export default function Dashboard() {
   }
 
   function handleCreated(newLink) {
-    setLinks((ls) => [newLink, ...ls]);
+    // Only prepend a well-formed link; otherwise refetch from the source of truth
+    if (newLink && typeof newLink === "object" && newLink.id != null) {
+      setLinks((ls) => [newLink, ...ls]);
+    } else {
+      loadLinks();
+    }
   }
 
   return (
