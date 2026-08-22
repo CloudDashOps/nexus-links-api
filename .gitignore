@@ -45,3 +45,5 @@ Thumbs.db
 
 # Local config
 *.local
+# Local deploy tooling
+tools/
