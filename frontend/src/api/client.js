@@ -29,9 +29,34 @@ api.interceptors.response.use(
   }
 );
 
-/** Normalise axios errors into a human-readable message. */
+/** Normalise axios errors into a human-readable, renderable STRING.
+ * FastAPI 422 responses carry `detail` as an ARRAY of objects
+ * ({type, loc, msg, input}) — rendering that directly crashes React
+ * ("Objects are not valid as a React child"), so flatten it here. */
 export function getErrorMessage(error, fallback = "Something went wrong") {
-  return error?.response?.data?.detail || error?.message || fallback;
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string" && detail) return detail;
+  if (Array.isArray(detail)) {
+    const parts = detail.map((d) => {
+      if (typeof d === "string") return d;
+      const where = Array.isArray(d?.loc)
+        ? d.loc.filter((p) => p !== "body").join(".")
+        : "";
+      const msg = d?.msg || JSON.stringify(d);
+      return where ? `${where}: ${msg}` : msg;
+    });
+    const joined = parts.join("; ");
+    if (joined) return joined;
+  }
+  if (detail && typeof detail === "object") {
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      /* fall through */
+    }
+  }
+  if (typeof error?.message === "string" && error.message) return error.message;
+  return fallback;
 }
 
 export default api;

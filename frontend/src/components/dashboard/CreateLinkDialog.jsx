@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import api from "@/api/client";
+import api, { getErrorMessage } from "@/api/client";
 
 const EMPTY_FORM = {
   target_url: "",
@@ -42,6 +42,11 @@ export default function CreateLinkDialog({ open, onOpenChange, onCreated }) {
     try {
       // Compose UTM parameters into the destination before sending
       let target = form.target_url.trim();
+      // People type "github.com/x" all the time; the backend only accepts
+      // absolute http(s) URLs, so add the scheme instead of failing 422.
+      if (target && !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(target)) {
+        target = `https://${target}`;
+      }
       if (showUtm) {
         try {
           const url = new URL(target);
@@ -72,7 +77,7 @@ export default function CreateLinkDialog({ open, onOpenChange, onCreated }) {
       setShowUtm(false);
       onOpenChange(false);
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Could not create the link");
+      toast.error(getErrorMessage(err, "Could not create the link"));
     } finally {
       setSaving(false);
     }
